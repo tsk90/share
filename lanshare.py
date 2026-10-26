@@ -3,7 +3,9 @@
   python lanshare.py [--port 8080] [--fps 60] [--bitrate 8] [--scale 1920] [--monitor 0]
 Open  http://<this-pc-ip>:<port>  in a browser. ffmpeg runs only while someone is watching.
 """
-import argparse, os, shutil, socket, subprocess, sys
+import argparse, hashlib, hmac, os, shutil, socket, subprocess, sys
+import time
+from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, urlparse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -56,6 +58,12 @@ async function start(my){
 </script>"""
 
 
+LOGIN = b"""<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>Screen Share</title>
+<style>body{margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#000;color:#fff;font:15px sans-serif}
+form{display:flex;gap:8px}input,button{background:#222;color:#fff;border:1px solid #555;border-radius:4px;padding:8px 12px;font:inherit}.e{color:#f66;position:fixed;top:40%%}</style>
+<form method=post action=/login><input name=pw type=password placeholder=Password autofocus><button>Watch</button></form>%s"""
+
+
 def lan_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -80,7 +88,9 @@ def main():
     p.add_argument("--bitrate", type=int, default=8, help="Mbps")
     p.add_argument("--scale", type=int, default=0, help="output width, 0 = native")
     p.add_argument("--monitor", type=int, default=0)
+    p.add_argument("--password", default=os.environ.get("SS_PASSWORD", ""), help="require this password (recommended when public)")
     a = p.parse_args()
+    token = hmac.new(a.password.encode(), b"lanshare-session", hashlib.sha256).hexdigest() if a.password else ""
     if not shutil.which("ffmpeg"):  # PATH may predate the ffmpeg install; re-read it from the registry
         import winreg
         for root, sub in ((winreg.HKEY_CURRENT_USER, "Environment"),
@@ -116,8 +126,41 @@ def main():
         def log_message(self, *args):
             pass
 
+        def authed(self):
+            if not a.password:
+                return True
+            c = SimpleCookie(self.headers.get("Cookie", ""))
+            return "ss" in c and hmac.compare_digest(c["ss"].value, token)
+
+        def send_login(self, error=False):
+            body = LOGIN % (b"<div class=e>Wrong password</div>" if error else b"")
+            self.send_response(401 if error else 200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def do_POST(self):
+            if urlparse(self.path).path != "/login" or not a.password:
+                return self.send_error(404)
+            n = min(int(self.headers.get("Content-Length", 0) or 0), 1024)
+            given = parse_qs(self.rfile.read(n).decode(errors="ignore")).get("pw", [""])[0]
+            if hmac.compare_digest(given.encode(), a.password.encode()):
+                secure = "; Secure" if self.headers.get("X-Forwarded-Proto") == "https" else ""
+                self.send_response(303)
+                self.send_header("Set-Cookie", f"ss={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=2592000{secure}")
+                self.send_header("Location", "/")
+                self.end_headers()
+            else:
+                time.sleep(1.5)  # slow down guessing
+                self.send_login(error=True)
+
         def do_GET(self):
             url = urlparse(self.path)
+            if not self.authed():
+                if url.path == "/stream":
+                    return self.send_error(401)
+                return self.send_login()
             if url.path == "/stream":
                 self.stream(parse_qs(url.query))
             elif url.path in ("/", "/index.html"):

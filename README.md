@@ -4,10 +4,15 @@ Low-CPU screen sharing to any web browser. The GPU does the capture (DXGI) and H
 
 ## LAN mode (no internet, lowest latency)
 - `tray.vbs` – runs in the system tray (right-click for menu), or `host.bat` for a console.
+- Started from the tray, a password is required (also on the LAN). `host.bat` has none unless you pass `--password`.
 - Open `http://<host-ip>:8080` in a browser on the same network. Resolution / FPS / bitrate are chosen in the viewer.
 - Needs: Windows, `winget install Gyan.FFmpeg`, Python 3, `pip install pystray pillow`.
 - Allow inbound TCP 8080 in Windows Firewall (admin PowerShell):
   `New-NetFirewallRule -DisplayName "LAN Screen Share Web" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow`
+
+## Public link (Cloudflare Tunnel, free)
+Tray menu -> **Start public link (Cloudflare)**. A random `https://….trycloudflare.com` link is copied to the clipboard; share it with the password (**Copy password** in the tray menu; stored in `%APPDATA%\LANScreenShare\config.json`). The link changes each time the tunnel restarts and only works while this PC is on.
+Needs `winget install Cloudflare.cloudflared`. Cloudflare's terms discourage heavy video over its network, so keep to personal use.
 
 ## Cloud mode (Render)
 A relay on Render serves the viewer page; an agent on your PC pushes the video to it over an outbound WebSocket (no port forwarding).

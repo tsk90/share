@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: screen-share
+    runtime: python
+    rootDir: cloud
+    buildCommand: pip install -r requirements.txt
+    startCommand: python server.py
+    healthCheckPath: /healthz
+    envVars:
+      - key: PASSWORD
+        generateValue: true   # read it in the Render dashboard -> Environment
+      - key: PYTHON_VERSION
+        value: 3.11.9

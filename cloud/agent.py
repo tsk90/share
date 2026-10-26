@@ -84,14 +84,14 @@ async def pump_ffmpeg(ws, cmd):
             proc.kill()
 
 
-async def run(a):
+async def run(a, status=print):
     name, opts = next(((n, o) for n, o in ENCODERS if encoder_works(n, o)), ENCODERS[-1])
-    print(f"Encoder: {name}")
+    status(f"Encoder: {name}")
     ws_url = a.url.replace("https://", "wss://").replace("http://", "ws://").rstrip("/") + "/ws/agent?pw=" + quote(a.password)
     while True:
         try:
             async with aiohttp.ClientSession() as sess, sess.ws_connect(ws_url, heartbeat=20, max_msg_size=0) as ws:
-                print("Connected to relay. Waiting for viewers...")
+                status("Connected - waiting for viewers")
                 task, want = None, None
                 async for msg in ws:
                     if msg.type != aiohttp.WSMsgType.TEXT:
@@ -106,16 +106,16 @@ async def run(a):
                         await asyncio.gather(task, return_exceptions=True)
                         task = None
                     if new[0]:
-                        print(f"Streaming {st['cfg']}")
+                        status(f"Streaming to {st['viewers']} viewer(s)")
                         task = asyncio.create_task(pump_ffmpeg(ws, build_cmd(name, opts, a.monitor, st["cfg"])))
                     else:
-                        print("No viewers - idle")
+                        status("Connected - idle (no viewers)")
                 if task:
                     task.cancel()
         except aiohttp.WSServerHandshakeError as e:
-            print("Relay rejected the connection (wrong password?)" if e.status == 401 else f"Relay error: {e}")
+            status("Wrong password" if e.status == 401 else f"Server error {e.status}")
         except (aiohttp.ClientError, OSError) as e:
-            print(f"Connection problem: {e}")
+            status("Cannot reach server - retrying")
         await asyncio.sleep(3)
 
 

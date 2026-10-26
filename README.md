@@ -17,6 +17,8 @@ Needs `winget install Cloudflare.cloudflared`. Cloudflare's terms discourage hea
 ## Cloud mode (Render)
 A relay on Render serves the viewer page; an agent on your PC pushes the video to it over an outbound WebSocket (no port forwarding).
 
+**Easiest PC side:** run `clouduild_exe.bat` once to build `cloud\dist\ScreenShareAgent.exe` (ffmpeg bundled, nothing else to install). Copy that single exe to any Windows PC, run it, enter the server link and password once, and it sits in the tray (right-click: status, open viewer page, change settings, start with Windows).
+
 1. Deploy: Render -> New -> Blueprint -> pick this repo (`render.yaml`). Copy the generated `PASSWORD` from the service's Environment tab.
 2. On the PC: `pip install aiohttp`, then
    `python cloud/agent.py --url https://<your-service>.onrender.com --password <PASSWORD>`
